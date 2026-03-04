@@ -1,7 +1,14 @@
-import { delay } from '@/constants/mock-api';
-import { RecentSales } from '@/features/overview/components/recent-sales';
+import { db } from '@/lib/db';
+import { timelineEvents } from '../../../../../drizzle/schema';
+import { desc } from 'drizzle-orm';
+import { ActivityTimeline } from '@/features/overview/components/activity-timeline';
 
-export default async function Sales() {
-  await delay(3000);
-  return <RecentSales />;
+export default async function SalesPage() {
+  const events = await db
+    .select()
+    .from(timelineEvents)
+    .orderBy(desc(timelineEvents.occurredAt))
+    .limit(10);
+
+  return <ActivityTimeline events={events} />;
 }

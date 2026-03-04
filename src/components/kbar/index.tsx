@@ -5,13 +5,94 @@ import {
   KBarPortal,
   KBarPositioner,
   KBarProvider,
-  KBarSearch
+  KBarSearch,
+  useRegisterActions,
+  useKBar
 } from 'kbar';
 import { useRouter } from 'next/navigation';
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import RenderResults from './render-result';
 import useThemeSwitching from './use-theme-switching';
 import { useFilteredNavItems } from '@/hooks/use-nav';
+
+function useEntitySearch() {
+  const { searchQuery } = useKBar((state) => ({ searchQuery: state.searchQuery }));
+  const router = useRouter();
+  const [entityActions, setEntityActions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setEntityActions([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/search?q=${encodeURIComponent(searchQuery)}&limit=3`,
+          { signal: controller.signal }
+        );
+        const json = await res.json();
+        if (!json.success) return;
+
+        const actions: any[] = [];
+        const d = json.data;
+
+        d.companies?.forEach((c: any) => {
+          actions.push({
+            id: `search-company-${c.id}`,
+            name: c.name,
+            subtitle: c.industry || 'Company',
+            section: 'Companies',
+            perform: () => router.push(`/dashboard/companies/${c.id}`)
+          });
+        });
+
+        d.contacts?.forEach((c: any) => {
+          actions.push({
+            id: `search-contact-${c.id}`,
+            name: c.name,
+            subtitle: [c.title, c.company].filter(Boolean).join(' at ') || 'Contact',
+            section: 'Contacts',
+            perform: () => router.push(`/dashboard/contacts/${c.id}`)
+          });
+        });
+
+        d.applications?.forEach((a: any) => {
+          actions.push({
+            id: `search-app-${a.id}`,
+            name: `${a.roleTitle} at ${a.companyName}`,
+            subtitle: a.status.replace(/_/g, ' '),
+            section: 'Applications',
+            perform: () => router.push('/dashboard/pipeline')
+          });
+        });
+
+        d.notes?.forEach((n: any) => {
+          actions.push({
+            id: `search-note-${n.id}`,
+            name: n.title,
+            subtitle: n.category?.replace(/_/g, ' ') || 'Note',
+            section: 'Notes',
+            perform: () => router.push(`/dashboard/notes/${n.id}`)
+          });
+        });
+
+        setEntityActions(actions);
+      } catch {
+        // Aborted or network error
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery, router]);
+
+  useRegisterActions(entityActions, [entityActions]);
+}
 
 export default function KBar({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -64,6 +145,7 @@ export default function KBar({ children }: { children: React.ReactNode }) {
 }
 const KBarComponent = ({ children }: { children: React.ReactNode }) => {
   useThemeSwitching();
+  useEntitySearch();
 
   return (
     <>
